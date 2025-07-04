@@ -46,7 +46,7 @@ func (self *RefsHelper) CheckoutRef(ref string, options types.CheckoutRefOptions
 		// loading a heap of commits is slow so we limit them whenever doing a reset
 		self.c.Contexts().LocalCommits.SetLimitCommits(true)
 
-		_ = self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI, KeepBranchSelectionIndex: true})
+		self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI, KeepBranchSelectionIndex: true})
 	}
 
 	localBranch, found := lo.Find(self.c.Model().Branches, func(branch *models.Branch) bool {
@@ -56,9 +56,9 @@ func (self *RefsHelper) CheckoutRef(ref string, options types.CheckoutRefOptions
 	withCheckoutStatus := func(f func(gocui.Task) error) error {
 		if found {
 			return self.c.WithInlineStatus(localBranch, types.ItemOperationCheckingOut, context.LOCAL_BRANCHES_CONTEXT_KEY, f)
-		} else {
-			return self.c.WithWaitingStatus(waitingStatus, f)
 		}
+
+		return self.c.WithWaitingStatus(waitingStatus, f)
 	}
 
 	return withCheckoutStatus(func(gocui.Task) error {
@@ -79,7 +79,7 @@ func (self *RefsHelper) CheckoutRef(ref string, options types.CheckoutRefOptions
 						Prompt: self.c.Tr.AutoStashPrompt,
 						HandleConfirm: func() error {
 							return withCheckoutStatus(func(gocui.Task) error {
-								if err := self.c.Git().Stash.Push(self.c.Tr.StashPrefix + ref); err != nil {
+								if err := self.c.Git().Stash.Push(fmt.Sprintf(self.c.Tr.AutoStashForCheckout, ref)); err != nil {
 									return err
 								}
 								if err := self.c.Git().Branch.Checkout(ref, cmdOptions); err != nil {
@@ -145,12 +145,10 @@ func (self *RefsHelper) CheckoutRemoteBranch(fullBranchName string, localBranchN
 					}
 					// Do a sync refresh to make sure the new branch is visible,
 					// so that we see an inline status when checking it out
-					if err := self.c.Refresh(types.RefreshOptions{
+					self.c.Refresh(types.RefreshOptions{
 						Mode:  types.SYNC,
 						Scope: []types.RefreshableView{types.BRANCHES},
-					}); err != nil {
-						return err
-					}
+					})
 					return checkout(localBranchName)
 				},
 			},
@@ -183,9 +181,7 @@ func (self *RefsHelper) ResetToRef(ref string, strength string, envVars []string
 	// loading a heap of commits is slow so we limit them whenever doing a reset
 	self.c.Contexts().LocalCommits.SetLimitCommits(true)
 
-	if err := self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES, types.BRANCHES, types.REFLOG, types.COMMITS}}); err != nil {
-		return err
-	}
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES, types.BRANCHES, types.REFLOG, types.COMMITS}})
 
 	return nil
 }
@@ -331,7 +327,7 @@ func (self *RefsHelper) NewBranch(from string, fromFormattedName string, suggest
 		}
 	}
 
-	refresh := func() error {
+	refresh := func() {
 		if self.c.Context().Current() != self.c.Contexts().Branches {
 			self.c.Context().Push(self.c.Contexts().Branches, types.OnFocusOpts{})
 		}
@@ -339,7 +335,7 @@ func (self *RefsHelper) NewBranch(from string, fromFormattedName string, suggest
 		self.c.Contexts().LocalCommits.SetSelection(0)
 		self.c.Contexts().Branches.SetSelection(0)
 
-		return self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI, KeepBranchSelectionIndex: true})
+		self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI, KeepBranchSelectionIndex: true})
 	}
 
 	self.c.Prompt(types.PromptOpts{
@@ -359,20 +355,16 @@ func (self *RefsHelper) NewBranch(from string, fromFormattedName string, suggest
 						Title:  self.c.Tr.AutoStashTitle,
 						Prompt: self.c.Tr.AutoStashPrompt,
 						HandleConfirm: func() error {
-							if err := self.c.Git().Stash.Push(self.c.Tr.StashPrefix + newBranchName); err != nil {
+							if err := self.c.Git().Stash.Push(fmt.Sprintf(self.c.Tr.AutoStashForNewBranch, newBranchName)); err != nil {
 								return err
 							}
 							if err := newBranchFunc(newBranchName, from); err != nil {
 								return err
 							}
-							popErr := self.c.Git().Stash.Pop(0)
+							err := self.c.Git().Stash.Pop(0)
 							// Branch switch successful so re-render the UI even if the pop operation failed (e.g. conflict).
-							refreshError := refresh()
-							if popErr != nil {
-								// An error from pop is the more important one to report to the user
-								return popErr
-							}
-							return refreshError
+							refresh()
+							return err
 						},
 					})
 
@@ -382,7 +374,8 @@ func (self *RefsHelper) NewBranch(from string, fromFormattedName string, suggest
 				return err
 			}
 
-			return refresh()
+			refresh()
+			return nil
 		},
 	})
 
@@ -396,7 +389,7 @@ func (self *RefsHelper) MoveCommitsToNewBranch() error {
 		return err
 	}
 
-	withNewBranchNamePrompt := func(baseBranchName string, f func(string, string) error) error {
+	withNewBranchNamePrompt := func(baseBranchName string, f func(string) error) error {
 		prompt := utils.ResolvePlaceholderString(
 			self.c.Tr.NewBranchNameBranchOff,
 			map[string]string{
@@ -415,7 +408,7 @@ func (self *RefsHelper) MoveCommitsToNewBranch() error {
 				self.c.LogAction(self.c.Tr.MoveCommitsToNewBranch)
 				newBranchName := SanitizedBranchName(response)
 				return self.c.WithWaitingStatus(self.c.Tr.MovingCommitsToNewBranchStatus, func(gocui.Task) error {
-					return f(currentBranch.Name, newBranchName)
+					return f(newBranchName)
 				})
 			},
 		})
@@ -454,8 +447,8 @@ func (self *RefsHelper) MoveCommitsToNewBranch() error {
 			{
 				Label: fmt.Sprintf(self.c.Tr.MoveCommitsToNewBranchFromBaseItem, shortBaseBranchName),
 				OnPress: func() error {
-					return withNewBranchNamePrompt(shortBaseBranchName, func(currentBranch string, newBranchName string) error {
-						return self.moveCommitsToNewBranchOffOfMainBranch(currentBranch, newBranchName, baseBranchRef)
+					return withNewBranchNamePrompt(shortBaseBranchName, func(newBranchName string) error {
+						return self.moveCommitsToNewBranchOffOfMainBranch(newBranchName, baseBranchRef)
 					})
 				},
 			},
@@ -469,14 +462,14 @@ func (self *RefsHelper) MoveCommitsToNewBranch() error {
 	})
 }
 
-func (self *RefsHelper) moveCommitsToNewBranchStackedOnCurrentBranch(currentBranch string, newBranchName string) error {
+func (self *RefsHelper) moveCommitsToNewBranchStackedOnCurrentBranch(newBranchName string) error {
 	if err := self.c.Git().Branch.NewWithoutCheckout(newBranchName, "HEAD"); err != nil {
 		return err
 	}
 
 	mustStash := IsWorkingTreeDirty(self.c.Model().Files)
 	if mustStash {
-		if err := self.c.Git().Stash.Push(self.c.Tr.StashPrefix + currentBranch); err != nil {
+		if err := self.c.Git().Stash.Push(fmt.Sprintf(self.c.Tr.AutoStashForNewBranch, newBranchName)); err != nil {
 			return err
 		}
 	}
@@ -498,17 +491,18 @@ func (self *RefsHelper) moveCommitsToNewBranchStackedOnCurrentBranch(currentBran
 	self.c.Contexts().LocalCommits.SetSelection(0)
 	self.c.Contexts().Branches.SetSelection(0)
 
-	return self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI, KeepBranchSelectionIndex: true})
+	self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI, KeepBranchSelectionIndex: true})
+	return nil
 }
 
-func (self *RefsHelper) moveCommitsToNewBranchOffOfMainBranch(currentBranch string, newBranchName string, baseBranchRef string) error {
+func (self *RefsHelper) moveCommitsToNewBranchOffOfMainBranch(newBranchName string, baseBranchRef string) error {
 	commitsToCherryPick := lo.Filter(self.c.Model().Commits, func(commit *models.Commit, _ int) bool {
 		return commit.Status == models.StatusUnpushed
 	})
 
 	mustStash := IsWorkingTreeDirty(self.c.Model().Files)
 	if mustStash {
-		if err := self.c.Git().Stash.Push(self.c.Tr.StashPrefix + currentBranch); err != nil {
+		if err := self.c.Git().Stash.Push(fmt.Sprintf(self.c.Tr.AutoStashForNewBranch, newBranchName)); err != nil {
 			return err
 		}
 	}
@@ -536,7 +530,8 @@ func (self *RefsHelper) moveCommitsToNewBranchOffOfMainBranch(currentBranch stri
 	self.c.Contexts().LocalCommits.SetSelection(0)
 	self.c.Contexts().Branches.SetSelection(0)
 
-	return self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI, KeepBranchSelectionIndex: true})
+	self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI, KeepBranchSelectionIndex: true})
+	return nil
 }
 
 func (self *RefsHelper) CanMoveCommitsToNewBranch() *types.DisabledReason {
@@ -563,7 +558,7 @@ func (self *RefsHelper) CanMoveCommitsToNewBranch() *types.DisabledReason {
 // SanitizedBranchName will remove all spaces in favor of a dash "-" to meet
 // git's branch naming requirement.
 func SanitizedBranchName(input string) string {
-	return strings.Replace(input, " ", "-", -1)
+	return strings.ReplaceAll(input, " ", "-")
 }
 
 // Checks if the given branch name is a remote branch, and returns the name of

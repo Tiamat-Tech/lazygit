@@ -35,6 +35,8 @@ func NewRebaseCommands(
 }
 
 func (self *RebaseCommands) RewordCommit(commits []*models.Commit, index int, summary string, description string) error {
+	// This check is currently unreachable (handled in LocalCommitsController.reword),
+	// but kept as a safeguard in case this method is used elsewhere.
 	if self.config.NeedsGpgSubprocessForCommit() {
 		return errors.New(self.Tr.DisabledForGPG)
 	}
@@ -325,9 +327,8 @@ func (self *RebaseCommands) MoveFixupCommitDown(commits []*models.Commit, target
 func todoFromCommit(commit *models.Commit) utils.Todo {
 	if commit.Action == todo.UpdateRef {
 		return utils.Todo{Ref: commit.Name}
-	} else {
-		return utils.Todo{Hash: commit.Hash()}
 	}
+	return utils.Todo{Hash: commit.Hash()}
 }
 
 // Sets the action for the given commits in the git-rebase-todo file
@@ -410,9 +411,9 @@ func (self *RebaseCommands) BeginInteractiveRebaseForCommit(
 			instruction:                daemon.NewInsertBreakInstruction(),
 			keepCommitsThatBecomeEmpty: keepCommitsThatBecomeEmpty,
 		}).Run()
-	} else {
-		return self.BeginInteractiveRebaseForCommitRange(commits, commitIndex, commitIndex, keepCommitsThatBecomeEmpty)
 	}
+
+	return self.BeginInteractiveRebaseForCommitRange(commits, commitIndex, commitIndex, keepCommitsThatBecomeEmpty)
 }
 
 func (self *RebaseCommands) BeginInteractiveRebaseForCommitRange(
@@ -572,7 +573,7 @@ func getBaseHashOrRoot(commits []*models.Commit, index int) string {
 	// at time of writing)
 	if index < len(commits) {
 		return commits[index].Hash()
-	} else {
-		return "--root"
 	}
+
+	return "--root"
 }

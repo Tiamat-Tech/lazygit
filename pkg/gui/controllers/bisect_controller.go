@@ -54,9 +54,8 @@ func (self *BisectController) openMenu(commit *models.Commit) error {
 	info := self.c.Git().Bisect.GetInfo()
 	if info.Started() {
 		return self.openMidBisectMenu(info, commit)
-	} else {
-		return self.openStartBisectMenu(info, commit)
 	}
+	return self.openStartBisectMenu(info, commit)
 }
 
 func (self *BisectController) openMidBisectMenu(info *git_commands.BisectInfo, commit *models.Commit) error {
@@ -176,7 +175,8 @@ func (self *BisectController) openStartBisectMenu(info *git_commands.BisectInfo,
 						return err
 					}
 
-					return self.c.Helpers().Bisect.PostBisectCommandRefresh()
+					self.c.Helpers().Bisect.PostBisectCommandRefresh()
+					return nil
 				},
 				DisabledReason: self.require(self.singleItemSelected())(),
 				Key:            'b',
@@ -193,7 +193,8 @@ func (self *BisectController) openStartBisectMenu(info *git_commands.BisectInfo,
 						return err
 					}
 
-					return self.c.Helpers().Bisect.PostBisectCommandRefresh()
+					self.c.Helpers().Bisect.PostBisectCommandRefresh()
+					return nil
 				},
 				DisabledReason: self.require(self.singleItemSelected())(),
 				Key:            'g',
@@ -212,7 +213,8 @@ func (self *BisectController) openStartBisectMenu(info *git_commands.BisectInfo,
 										return err
 									}
 
-									return self.c.Helpers().Bisect.PostBisectCommandRefresh()
+									self.c.Helpers().Bisect.PostBisectCommandRefresh()
+									return nil
 								},
 							})
 							return nil
@@ -246,7 +248,8 @@ func (self *BisectController) showBisectCompleteMessage(candidateHashes []string
 				return err
 			}
 
-			return self.c.Helpers().Bisect.PostBisectCommandRefresh()
+			self.c.Helpers().Bisect.PostBisectCommandRefresh()
+			return nil
 		},
 	})
 
@@ -271,20 +274,21 @@ func (self *BisectController) afterMark(selectCurrent bool, waitToReselect bool)
 }
 
 func (self *BisectController) afterBisectMarkRefresh(selectCurrent bool, waitToReselect bool) error {
-	selectFn := func() error {
+	selectFn := func() {
 		if selectCurrent {
 			self.selectCurrentBisectCommit()
 		}
-		return nil
 	}
 
 	if waitToReselect {
-		return self.c.Refresh(types.RefreshOptions{Mode: types.SYNC, Scope: []types.RefreshableView{}, Then: selectFn})
-	} else {
-		_ = selectFn()
-
-		return self.c.Helpers().Bisect.PostBisectCommandRefresh()
+		self.c.Refresh(types.RefreshOptions{Mode: types.SYNC, Scope: []types.RefreshableView{}, Then: selectFn})
+		return nil
 	}
+
+	selectFn()
+
+	self.c.Helpers().Bisect.PostBisectCommandRefresh()
+	return nil
 }
 
 func (self *BisectController) selectCurrentBisectCommit() {

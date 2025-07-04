@@ -39,9 +39,10 @@ func (self *FilesController) createResetMenu() error {
 					self.animateExplosion()
 				}
 
-				return self.c.Refresh(
+				self.c.Refresh(
 					types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}},
 				)
+				return nil
 			},
 			Key:     'x',
 			Tooltip: self.c.Tr.NukeDescription,
@@ -57,9 +58,10 @@ func (self *FilesController) createResetMenu() error {
 					return err
 				}
 
-				return self.c.Refresh(
+				self.c.Refresh(
 					types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}},
 				)
+				return nil
 			},
 			Key: 'u',
 		},
@@ -74,9 +76,10 @@ func (self *FilesController) createResetMenu() error {
 					return err
 				}
 
-				return self.c.Refresh(
+				self.c.Refresh(
 					types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}},
 				)
+				return nil
 			},
 			Key: 'c',
 		},
@@ -98,9 +101,10 @@ func (self *FilesController) createResetMenu() error {
 					return err
 				}
 
-				return self.c.Refresh(
+				self.c.Refresh(
 					types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}},
 				)
+				return nil
 			},
 			Key: 'S',
 		},
@@ -115,9 +119,10 @@ func (self *FilesController) createResetMenu() error {
 					return err
 				}
 
-				return self.c.Refresh(
+				self.c.Refresh(
 					types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}},
 				)
+				return nil
 			},
 			Key: 's',
 		},
@@ -132,9 +137,10 @@ func (self *FilesController) createResetMenu() error {
 					return err
 				}
 
-				return self.c.Refresh(
+				self.c.Refresh(
 					types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}},
 				)
+				return nil
 			},
 			Key: 'm',
 		},
@@ -149,9 +155,10 @@ func (self *FilesController) createResetMenu() error {
 					return err
 				}
 
-				return self.c.Refresh(
+				self.c.Refresh(
 					types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}},
 				)
+				return nil
 			},
 			Key: 'h',
 		},
@@ -180,7 +187,7 @@ func (self *FilesController) Explode(v *gocui.View, onDone func()) {
 
 	self.c.OnWorker(func(_ gocui.Task) error {
 		max := 25
-		for i := 0; i < max; i++ {
+		for i := range max {
 			image := getExplodeImage(width, height, i, max)
 			style := styles[(i*len(styles)/max)%len(styles)]
 			coloredImage := style.Sprint(image)
@@ -229,8 +236,8 @@ func getExplodeImage(width int, height int, frame int, max int) string {
 		innerRadius = (progress - 0.5) * 2 * maxRadius
 	}
 
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
+	for y := range height {
+		for x := range width {
 			// calculate distance from center, scale x by 2 to compensate for character aspect ratio
 			distance := math.Hypot(float64(x-centerX), float64(y-centerY)*2)
 

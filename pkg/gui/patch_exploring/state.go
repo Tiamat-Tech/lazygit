@@ -28,6 +28,12 @@ type State struct {
 	viewLineIndices []int
 	// Array of indices of the original patch lines indexed by a wrapped view line index
 	patchLineIndices []int
+
+	// whether the user has switched to hunk mode manually; if hunk mode is on
+	// but this is false, then hunk mode was enabled because the config makes it
+	// on by default.
+	// this makes a difference for whether we want to escape out of hunk mode
+	userEnabledHunkMode bool
 }
 
 // these represent what select mode we're in
@@ -39,7 +45,7 @@ const (
 	HUNK
 )
 
-func NewState(diff string, selectedLineIdx int, view *gocui.View, oldState *State) *State {
+func NewState(diff string, selectedLineIdx int, view *gocui.View, oldState *State, useHunkModeByDefault bool) *State {
 	if oldState != nil && diff == oldState.diff && selectedLineIdx == -1 {
 		// if we're here then we can return the old state. If selectedLineIdx was not -1
 		// then that would mean we were trying to click and potentially drag a range, which
@@ -61,6 +67,15 @@ func NewState(diff string, selectedLineIdx int, view *gocui.View, oldState *Stat
 	}
 
 	selectMode := LINE
+	if useHunkModeByDefault {
+		selectMode = HUNK
+	}
+
+	userEnabledHunkMode := false
+	if oldState != nil {
+		userEnabledHunkMode = oldState.userEnabledHunkMode
+	}
+
 	// if we have clicked from the outside to focus the main view we'll pass in a non-negative line index so that we can instantly select that line
 	if selectedLineIdx >= 0 {
 		// Clamp to the number of wrapped view lines; index might be out of
@@ -70,9 +85,9 @@ func NewState(diff string, selectedLineIdx int, view *gocui.View, oldState *Stat
 		selectMode = RANGE
 		rangeStartLineIdx = selectedLineIdx
 	} else if oldState != nil {
-		// if we previously had a selectMode of RANGE, we want that to now be line again
-		if oldState.selectMode == HUNK {
-			selectMode = HUNK
+		// if we previously had a selectMode of RANGE, we want that to now be line again (or hunk, if that's the default)
+		if oldState.selectMode != RANGE {
+			selectMode = oldState.selectMode
 		}
 		selectedLineIdx = viewLineIndices[patch.GetNextChangeIdx(oldState.patchLineIndices[oldState.selectedLineIdx])]
 	} else {
@@ -80,14 +95,15 @@ func NewState(diff string, selectedLineIdx int, view *gocui.View, oldState *Stat
 	}
 
 	return &State{
-		patch:             patch,
-		selectedLineIdx:   selectedLineIdx,
-		selectMode:        selectMode,
-		rangeStartLineIdx: rangeStartLineIdx,
-		rangeIsSticky:     false,
-		diff:              diff,
-		viewLineIndices:   viewLineIndices,
-		patchLineIndices:  patchLineIndices,
+		patch:               patch,
+		selectedLineIdx:     selectedLineIdx,
+		selectMode:          selectMode,
+		rangeStartLineIdx:   rangeStartLineIdx,
+		rangeIsSticky:       false,
+		diff:                diff,
+		viewLineIndices:     viewLineIndices,
+		patchLineIndices:    patchLineIndices,
+		userEnabledHunkMode: userEnabledHunkMode,
 	}
 }
 
@@ -125,6 +141,12 @@ func (s *State) ToggleSelectHunk() {
 		s.selectMode = LINE
 	} else {
 		s.selectMode = HUNK
+		s.userEnabledHunkMode = true
+
+		// If we are not currently on a change line, select the next one (or the
+		// previous one if there is no next one):
+		s.selectedLineIdx = s.viewLineIndices[s.patch.GetNextChangeIdx(
+			s.patchLineIndices[s.selectedLineIdx])]
 	}
 }
 
@@ -148,6 +170,10 @@ func (s *State) SetRangeIsSticky(value bool) {
 
 func (s *State) SelectingHunk() bool {
 	return s.selectMode == HUNK
+}
+
+func (s *State) SelectingHunkEnabledByUser() bool {
+	return s.selectMode == HUNK && s.userEnabledHunkMode
 }
 
 func (s *State) SelectingRange() bool {
@@ -203,25 +229,49 @@ func (s *State) DragSelectLine(newSelectedLineIdx int) {
 
 func (s *State) CycleSelection(forward bool) {
 	if s.SelectingHunk() {
-		s.CycleHunk(forward)
+		if forward {
+			s.SelectNextHunk()
+		} else {
+			s.SelectPreviousHunk()
+		}
 	} else {
 		s.CycleLine(forward)
 	}
 }
 
-func (s *State) CycleHunk(forward bool) {
-	change := 1
-	if !forward {
-		change = -1
+func (s *State) SelectPreviousHunk() {
+	patchLines := s.patch.Lines()
+	patchLineIdx := s.patchLineIndices[s.selectedLineIdx]
+	nextNonChangeLine := patchLineIdx
+	for nextNonChangeLine >= 0 && patchLines[nextNonChangeLine].IsChange() {
+		nextNonChangeLine--
 	}
-
-	hunkIdx := s.patch.HunkContainingLine(s.patchLineIndices[s.selectedLineIdx])
-	if hunkIdx != -1 {
-		newHunkIdx := hunkIdx + change
-		if newHunkIdx >= 0 && newHunkIdx < s.patch.HunkCount() {
-			start := s.patch.HunkStartIdx(newHunkIdx)
-			s.selectedLineIdx = s.viewLineIndices[s.patch.GetNextChangeIdx(start)]
+	nextChangeLine := nextNonChangeLine
+	for nextChangeLine >= 0 && !patchLines[nextChangeLine].IsChange() {
+		nextChangeLine--
+	}
+	if nextChangeLine >= 0 {
+		// Now we found a previous hunk, but we're on its last line. Skip to the beginning.
+		for nextChangeLine > 0 && patchLines[nextChangeLine-1].IsChange() {
+			nextChangeLine--
 		}
+		s.selectedLineIdx = s.viewLineIndices[nextChangeLine]
+	}
+}
+
+func (s *State) SelectNextHunk() {
+	patchLines := s.patch.Lines()
+	patchLineIdx := s.patchLineIndices[s.selectedLineIdx]
+	nextNonChangeLine := patchLineIdx
+	for nextNonChangeLine < len(patchLines) && patchLines[nextNonChangeLine].IsChange() {
+		nextNonChangeLine++
+	}
+	nextChangeLine := nextNonChangeLine
+	for nextChangeLine < len(patchLines) && !patchLines[nextChangeLine].IsChange() {
+		nextChangeLine++
+	}
+	if nextChangeLine < len(patchLines) {
+		s.selectedLineIdx = s.viewLineIndices[nextChangeLine]
 	}
 }
 
@@ -259,17 +309,39 @@ func (s *State) CurrentHunkBounds() (int, int) {
 	return start, end
 }
 
+func (s *State) selectionRangeForCurrentBlockOfChanges() (int, int) {
+	patchLines := s.patch.Lines()
+	patchLineIdx := s.patchLineIndices[s.selectedLineIdx]
+
+	patchStart := patchLineIdx
+	for patchStart > 0 && patchLines[patchStart-1].IsChange() {
+		patchStart--
+	}
+
+	patchEnd := patchLineIdx
+	for patchEnd < len(patchLines)-1 && patchLines[patchEnd+1].IsChange() {
+		patchEnd++
+	}
+
+	viewStart, viewEnd := s.viewLineIndices[patchStart], s.viewLineIndices[patchEnd]
+
+	// Increase viewEnd in case the last patch line is wrapped to more than one view line.
+	for viewEnd < len(s.patchLineIndices)-1 && s.patchLineIndices[viewEnd] == s.patchLineIndices[viewEnd+1] {
+		viewEnd++
+	}
+
+	return viewStart, viewEnd
+}
+
 func (s *State) SelectedViewRange() (int, int) {
 	switch s.selectMode {
 	case HUNK:
-		start, end := s.CurrentHunkBounds()
-		return s.viewLineIndices[start], s.viewLineIndices[end]
+		return s.selectionRangeForCurrentBlockOfChanges()
 	case RANGE:
 		if s.rangeStartLineIdx > s.selectedLineIdx {
 			return s.selectedLineIdx, s.rangeStartLineIdx
-		} else {
-			return s.rangeStartLineIdx, s.selectedLineIdx
 		}
+		return s.rangeStartLineIdx, s.selectedLineIdx
 	case LINE:
 		return s.selectedLineIdx, s.selectedLineIdx
 	default:
@@ -281,6 +353,20 @@ func (s *State) SelectedViewRange() (int, int) {
 func (s *State) SelectedPatchRange() (int, int) {
 	start, end := s.SelectedViewRange()
 	return s.patchLineIndices[start], s.patchLineIndices[end]
+}
+
+// Returns the line indices of the selected patch range that are changes (i.e. additions or deletions)
+func (s *State) LineIndicesOfAddedOrDeletedLinesInSelectedPatchRange() []int {
+	viewStart, viewEnd := s.SelectedViewRange()
+	patchStart, patchEnd := s.patchLineIndices[viewStart], s.patchLineIndices[viewEnd]
+	lines := s.patch.Lines()
+	indices := []int{}
+	for i := patchStart; i <= patchEnd; i++ {
+		if lines[i].IsChange() {
+			indices = append(indices, i)
+		}
+	}
+	return indices
 }
 
 func (s *State) CurrentLineNumber() int {
@@ -324,4 +410,12 @@ func wrapPatchLines(diff string, view *gocui.View) ([]int, []int) {
 	_, viewLineIndices, patchLineIndices := utils.WrapViewLinesToWidth(
 		view.Wrap, view.Editable, strings.TrimSuffix(diff, "\n"), view.InnerWidth(), view.TabWidth)
 	return viewLineIndices, patchLineIndices
+}
+
+func (s *State) SelectNextStageableLineOfSameIncludedState(includedLines []int, included bool) {
+	_, lastLineIdx := s.SelectedPatchRange()
+	patchLineIdx, found := s.patch.GetNextChangeIdxOfSameIncludedState(lastLineIdx+1, includedLines, included)
+	if found {
+		s.SelectLine(s.viewLineIndices[patchLineIdx])
+	}
 }

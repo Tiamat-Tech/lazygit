@@ -168,7 +168,7 @@ func (self *StagingController) EditFile() error {
 }
 
 func (self *StagingController) Escape() error {
-	if self.context.GetState().SelectingRange() || self.context.GetState().SelectingHunk() {
+	if self.context.GetState().SelectingRange() || self.context.GetState().SelectingHunkEnabledByUser() {
 		self.context.GetState().SetLineSelectMode()
 		self.c.PostRefreshUpdate(self.context)
 		return nil
@@ -221,7 +221,8 @@ func (self *StagingController) applySelectionAndRefresh(reverse bool) error {
 		return err
 	}
 
-	return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES, types.STAGING}})
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES, types.STAGING}})
+	return nil
 }
 
 func (self *StagingController) applySelection(reverse bool) error {
@@ -275,7 +276,8 @@ func (self *StagingController) EditHunkAndRefresh() error {
 		return err
 	}
 
-	return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES, types.STAGING}})
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES, types.STAGING}})
+	return nil
 }
 
 func (self *StagingController) editHunk() error {

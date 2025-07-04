@@ -3,6 +3,7 @@ package controllers
 import (
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
+	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 )
@@ -82,8 +83,10 @@ func (self *StashController) GetOnRenderToMain() func() {
 			if stashEntry == nil {
 				task = types.NewRenderStringTask(self.c.Tr.NoStashEntries)
 			} else {
-				task = types.NewRunPtyTask(
+				prefix := style.FgYellow.Sprintf("%s\n\n", stashEntry.Description())
+				task = types.NewRunPtyTaskWithPrefix(
 					self.c.Git().Stash.ShowStashEntryCmdObj(stashEntry.Index).GetCmd(),
+					prefix,
 				)
 			}
 
@@ -107,7 +110,7 @@ func (self *StashController) handleStashApply(stashEntry *models.StashEntry) err
 	apply := func() error {
 		self.c.LogAction(self.c.Tr.Actions.Stash)
 		err := self.c.Git().Stash.Apply(stashEntry.Index)
-		_ = self.postStashRefresh()
+		self.postStashRefresh()
 		if err != nil {
 			return err
 		}
@@ -136,7 +139,7 @@ func (self *StashController) handleStashPop(stashEntry *models.StashEntry) error
 	pop := func() error {
 		self.c.LogAction(self.c.Tr.Actions.Stash)
 		err := self.c.Git().Stash.Pop(stashEntry.Index)
-		_ = self.postStashRefresh()
+		self.postStashRefresh()
 		if err != nil {
 			return err
 		}
@@ -170,11 +173,12 @@ func (self *StashController) handleStashDrop(stashEntries []*models.StashEntry) 
 			startIndex := stashEntries[0].Index
 			for range stashEntries {
 				err := self.c.Git().Stash.Drop(startIndex)
-				_ = self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH}})
+				self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH}})
 				if err != nil {
 					return err
 				}
 			}
+			self.context().CollapseRangeSelectionToTop()
 			return nil
 		},
 	})
@@ -182,8 +186,8 @@ func (self *StashController) handleStashDrop(stashEntries []*models.StashEntry) 
 	return nil
 }
 
-func (self *StashController) postStashRefresh() error {
-	return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH, types.FILES}})
+func (self *StashController) postStashRefresh() {
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH, types.FILES}})
 }
 
 func (self *StashController) handleNewBranchOffStashEntry(stashEntry *models.StashEntry) error {
@@ -205,12 +209,13 @@ func (self *StashController) handleRenameStashEntry(stashEntry *models.StashEntr
 			self.c.LogAction(self.c.Tr.Actions.RenameStash)
 			err := self.c.Git().Stash.Rename(stashEntry.Index, response)
 			if err != nil {
-				_ = self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH}})
+				self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH}})
 				return err
 			}
 			self.context().SetSelection(0) // Select the renamed stash
 			self.context().FocusLine()
-			return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH}})
+			self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH}})
+			return nil
 		},
 	})
 
