@@ -86,9 +86,9 @@ func newLogger(cfg config.AppConfigurer) *logrus.Entry {
 			log.Fatal(err)
 		}
 		return logs.NewDevelopmentLogger(logPath)
-	} else {
-		return logs.NewProductionLogger()
 	}
+
+	return logs.NewProductionLogger()
 }
 
 // NewApp bootstrap a new application
@@ -148,7 +148,7 @@ func (app *App) validateGitVersion() (*git_commands.GitVersion, error) {
 		return nil, minVersionError
 	}
 
-	if version.IsOlderThan(2, 22, 0) {
+	if version.IsOlderThan(2, 32, 0) {
 		return nil, minVersionError
 	}
 

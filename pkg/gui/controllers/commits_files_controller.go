@@ -289,7 +289,8 @@ func (self *CommitFilesController) checkout(node *filetree.CommitFileNode) error
 		return err
 	}
 
-	return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+	self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+	return nil
 }
 
 func (self *CommitFilesController) discard(selectedNodes []*filetree.CommitFileNode) error {
@@ -313,19 +314,13 @@ func (self *CommitFilesController) discard(selectedNodes []*filetree.CommitFileN
 				// Reset the current patch if there is one.
 				if self.c.Git().Patch.PatchBuilder.Active() {
 					self.c.Git().Patch.PatchBuilder.Reset()
-					if err := self.c.Refresh(types.RefreshOptions{Mode: types.BLOCK_UI}); err != nil {
-						return err
-					}
 				}
 
 				for _, node := range selectedNodes {
-					err := node.ForEachFile(func(file *models.CommitFile) error {
+					_ = node.ForEachFile(func(file *models.CommitFile) error {
 						filePaths = append(filePaths, file.GetPath())
 						return nil
 					})
-					if err != nil {
-						return err
-					}
 				}
 
 				err := self.c.Git().Rebase.DiscardOldFileChanges(self.c.Model().Commits, self.c.Contexts().LocalCommits.GetSelectedLineIdx(), filePaths)
@@ -336,7 +331,8 @@ func (self *CommitFilesController) discard(selectedNodes []*filetree.CommitFileN
 				if self.context().RangeSelectEnabled() {
 					self.context().GetList().CancelRangeSelect()
 				}
-				return self.c.Refresh(types.RefreshOptions{Mode: types.SYNC})
+
+				return nil
 			})
 		},
 	})
@@ -382,8 +378,8 @@ func (self *CommitFilesController) openDiffTool(node *filetree.CommitFileNode) e
 }
 
 func (self *CommitFilesController) toggleForPatch(selectedNodes []*filetree.CommitFileNode) error {
-	if self.c.AppState.DiffContextSize == 0 {
-		return fmt.Errorf(self.c.Tr.Actions.NotEnoughContextToStage,
+	if self.c.UserConfig().Git.DiffContextSize == 0 {
+		return fmt.Errorf(self.c.Tr.Actions.NotEnoughContextForCustomPatch,
 			keybindings.Label(self.c.UserConfig().Keybinding.Universal.IncreaseContextInDiffView))
 	}
 
@@ -430,20 +426,18 @@ func (self *CommitFilesController) toggleForPatch(selectedNodes []*filetree.Comm
 	}
 
 	from, to, reverse := self.currentFromToReverseForPatchBuilding()
-	if self.c.Git().Patch.PatchBuilder.Active() && self.c.Git().Patch.PatchBuilder.NewPatchRequired(from, to, reverse) {
-		self.c.Confirm(types.ConfirmOpts{
-			Title:  self.c.Tr.DiscardPatch,
-			Prompt: self.c.Tr.DiscardPatchConfirm,
-			HandleConfirm: func() error {
+	mustDiscardPatch := self.c.Git().Patch.PatchBuilder.Active() && self.c.Git().Patch.PatchBuilder.NewPatchRequired(from, to, reverse)
+	return self.c.ConfirmIf(mustDiscardPatch, types.ConfirmOpts{
+		Title:  self.c.Tr.DiscardPatch,
+		Prompt: self.c.Tr.DiscardPatchConfirm,
+		HandleConfirm: func() error {
+			if mustDiscardPatch {
 				self.c.Git().Patch.PatchBuilder.Reset()
-				return toggle()
-			},
-		})
+			}
 
-		return nil
-	}
-
-	return toggle()
+			return toggle()
+		},
+	})
 }
 
 func (self *CommitFilesController) toggleAllForPatch(_ *filetree.CommitFileNode) error {
@@ -478,37 +472,31 @@ func (self *CommitFilesController) enterCommitFile(node *filetree.CommitFileNode
 		return self.handleToggleCommitFileDirCollapsed(node)
 	}
 
-	if self.c.AppState.DiffContextSize == 0 {
-		return fmt.Errorf(self.c.Tr.Actions.NotEnoughContextToStage,
+	if self.c.UserConfig().Git.DiffContextSize == 0 {
+		return fmt.Errorf(self.c.Tr.Actions.NotEnoughContextForCustomPatch,
 			keybindings.Label(self.c.UserConfig().Keybinding.Universal.IncreaseContextInDiffView))
 	}
 
-	enterTheFile := func() error {
-		if !self.c.Git().Patch.PatchBuilder.Active() {
-			if err := self.startPatchBuilder(); err != nil {
-				return err
-			}
-		}
-
-		self.c.Context().Push(self.c.Contexts().CustomPatchBuilder, opts)
-		return nil
-	}
-
 	from, to, reverse := self.currentFromToReverseForPatchBuilding()
-	if self.c.Git().Patch.PatchBuilder.Active() && self.c.Git().Patch.PatchBuilder.NewPatchRequired(from, to, reverse) {
-		self.c.Confirm(types.ConfirmOpts{
-			Title:  self.c.Tr.DiscardPatch,
-			Prompt: self.c.Tr.DiscardPatchConfirm,
-			HandleConfirm: func() error {
+	mustDiscardPatch := self.c.Git().Patch.PatchBuilder.Active() && self.c.Git().Patch.PatchBuilder.NewPatchRequired(from, to, reverse)
+	return self.c.ConfirmIf(mustDiscardPatch, types.ConfirmOpts{
+		Title:  self.c.Tr.DiscardPatch,
+		Prompt: self.c.Tr.DiscardPatchConfirm,
+		HandleConfirm: func() error {
+			if mustDiscardPatch {
 				self.c.Git().Patch.PatchBuilder.Reset()
-				return enterTheFile()
-			},
-		})
+			}
 
-		return nil
-	}
+			if !self.c.Git().Patch.PatchBuilder.Active() {
+				if err := self.startPatchBuilder(); err != nil {
+					return err
+				}
+			}
 
-	return enterTheFile()
+			self.c.Context().Push(self.c.Contexts().CustomPatchBuilder, opts)
+			return nil
+		},
+	})
 }
 
 func (self *CommitFilesController) handleToggleCommitFileDirCollapsed(node *filetree.CommitFileNode) error {

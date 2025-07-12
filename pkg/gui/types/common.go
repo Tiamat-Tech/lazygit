@@ -29,7 +29,7 @@ type IGuiCommon interface {
 	LogAction(action string)
 	LogCommand(cmdStr string, isCommandLine bool)
 	// we call this when we want to refetch some models and render the result. Internally calls PostRefreshUpdate
-	Refresh(RefreshOptions) error
+	Refresh(RefreshOptions)
 	// we call this when we've changed something in the view model but not the actual model,
 	// e.g. expanding or collapsing a folder in a file view. Calling 'Refresh' in this
 	// case would be overkill, although refresh will internally call 'PostRefreshUpdate'
@@ -126,6 +126,8 @@ type IPopupHandler interface {
 	Alert(title string, message string)
 	// Shows a popup asking the user for confirmation.
 	Confirm(opts ConfirmOpts)
+	// Shows a popup asking the user for confirmation if condition is true; otherwise, the HandleConfirm function is called directly.
+	ConfirmIf(condition bool, opts ConfirmOpts) error
 	// Shows a popup prompting the user for input.
 	Prompt(opts PromptOpts)
 	WithWaitingStatus(message string, f func(gocui.Task) error) error

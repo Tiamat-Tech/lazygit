@@ -107,6 +107,8 @@ type GuiConfig struct {
 	// makes it much easier to work with diffs that have long lines, e.g.
 	// paragraphs of markdown text.
 	WrapLinesInStagingView bool `yaml:"wrapLinesInStagingView"`
+	// If true, hunk selection mode will be enabled by default when entering the staging view.
+	UseHunkModeInStagingView bool `yaml:"useHunkModeInStagingView"`
 	// One of 'auto' (default) | 'en' | 'zh-CN' | 'zh-TW' | 'pl' | 'nl' | 'ja' | 'ko' | 'ru'
 	Language string `yaml:"language" jsonschema:"enum=auto,enum=en,enum=zh-TW,enum=zh-CN,enum=pl,enum=nl,enum=ja,enum=ko,enum=ru"`
 	// Format used when displaying time e.g. commit time.
@@ -262,6 +264,12 @@ type GitConfig struct {
 	BranchLogCmd string `yaml:"branchLogCmd"`
 	// Commands used to display git log of all branches in the main window, they will be cycled in order of appearance (array of strings)
 	AllBranchesLogCmds []string `yaml:"allBranchesLogCmds"`
+	// If true, git diffs are rendered with the `--ignore-all-space` flag, which ignores whitespace changes. Can be toggled from within Lazygit with `<c-w>`.
+	IgnoreWhitespaceInDiffView bool `yaml:"ignoreWhitespaceInDiffView"`
+	// The number of lines of context to show around each diff hunk. Can be changed from within Lazygit with the `{` and `}` keys.
+	DiffContextSize uint64 `yaml:"diffContextSize"`
+	// The threshold for considering a file to be renamed, in percent. Can be changed from within Lazygit with the `(` and `)` keys.
+	RenameSimilarityThreshold int `yaml:"renameSimilarityThreshold" jsonschema:"minimum=0,maximum=100"`
 	// If true, do not spawn a separate process when using GPG
 	OverrideGpg bool `yaml:"overrideGpg"`
 	// If true, do not allow force pushes
@@ -277,6 +285,14 @@ type GitConfig struct {
 	ParseEmoji bool `yaml:"parseEmoji"`
 	// Config for showing the log in the commits view
 	Log LogConfig `yaml:"log"`
+	// How branches are sorted in the local branches view.
+	// One of: 'date' (default) | 'recency' | 'alphabetical'
+	// Can be changed from within Lazygit with the Sort Order menu (`s`) in the branches panel.
+	LocalBranchSortOrder string `yaml:"localBranchSortOrder" jsonschema:"enum=date,enum=recency,enum=alphabetical"`
+	// How branches are sorted in the remote branches view.
+	// One of: 'date' (default) | 'alphabetical'
+	// Can be changed from within Lazygit with the Sort Order menu (`s`) in the remote branches panel.
+	RemoteBranchSortOrder string `yaml:"remoteBranchSortOrder" jsonschema:"enum=date,enum=alphabetical"`
 	// When copying commit hashes to the clipboard, truncate them to this
 	// length. Set to 40 to disable truncation.
 	TruncateCopiedCommitHashesTo int `yaml:"truncateCopiedCommitHashesTo"`
@@ -330,13 +346,13 @@ type LogConfig struct {
 	// 'topo-order' makes it easier to read the git log graph, but commits may not
 	// appear chronologically. See https://git-scm.com/docs/
 	//
-	// Deprecated: Configure this with `Log menu -> Commit sort order` (<c-l> in the commits window by default).
-	Order string `yaml:"order" jsonschema:"deprecated,enum=date-order,enum=author-date-order,enum=topo-order,enum=default,deprecated"`
+	// Can be changed from within Lazygit with `Log menu -> Commit sort order` (`<c-l>` in the commits window by default).
+	Order string `yaml:"order" jsonschema:"enum=date-order,enum=author-date-order,enum=topo-order,enum=default"`
 	// This determines whether the git graph is rendered in the commits panel
 	// One of 'always' | 'never' | 'when-maximised'
 	//
-	// Deprecated: Configure this with `Log menu -> Show git graph` (<c-l> in the commits window by default).
-	ShowGraph string `yaml:"showGraph" jsonschema:"deprecated,enum=always,enum=never,enum=when-maximised"`
+	// Can be toggled from within lazygit with `Log menu -> Show git graph` (`<c-l>` in the commits window by default).
+	ShowGraph string `yaml:"showGraph" jsonschema:"enum=always,enum=never,enum=when-maximised"`
 	// displays the whole git graph by default in the commits view (equivalent to passing the `--all` argument to `git log`)
 	ShowWholeGraph bool `yaml:"showWholeGraph"`
 }
@@ -481,6 +497,7 @@ type KeybindingBranchesConfig struct {
 	CopyPullRequestURL     string `yaml:"copyPullRequestURL"`
 	CheckoutBranchByName   string `yaml:"checkoutBranchByName"`
 	ForceCheckoutBranch    string `yaml:"forceCheckoutBranch"`
+	CheckoutPreviousBranch string `yaml:"checkoutPreviousBranch"`
 	RebaseBranch           string `yaml:"rebaseBranch"`
 	RenameBranch           string `yaml:"renameBranch"`
 	MergeIntoCurrentBranch string `yaml:"mergeIntoCurrentBranch"`
@@ -600,29 +617,6 @@ type OSConfig struct {
 	// A shell startup file containing shell aliases or shell functions. This will be sourced before running any shell commands, so that shell functions are available in the `:` command prompt or even in custom commands.
 	// See https://github.com/jesseduffield/lazygit/blob/master/docs/Config.md#using-aliases-or-functions-in-shell-commands
 	ShellFunctionsFile string `yaml:"shellFunctionsFile"`
-
-	// --------
-
-	// The following configs are all deprecated and kept for backward
-	// compatibility. They will be removed in the future.
-
-	// EditCommand is the command for editing a file.
-	// Deprecated: use Edit instead. Note that semantics are different:
-	// EditCommand is just the command itself, whereas Edit contains a
-	// "{{filename}}" variable.
-	EditCommand string `yaml:"editCommand,omitempty" jsonschema:"deprecated"`
-
-	// EditCommandTemplate is the command template for editing a file
-	// Deprecated: use EditAtLine instead.
-	EditCommandTemplate string `yaml:"editCommandTemplate,omitempty" jsonschema:"deprecated"`
-
-	// OpenCommand is the command for opening a file
-	// Deprecated: use Open instead.
-	OpenCommand string `yaml:"openCommand,omitempty" jsonschema:"deprecated"`
-
-	// OpenLinkCommand is the command for opening a link
-	// Deprecated: use OpenLink instead.
-	OpenLinkCommand string `yaml:"openLinkCommand,omitempty" jsonschema:"deprecated"`
 }
 
 type CustomCommandAfterHook struct {
@@ -745,6 +739,7 @@ func GetDefaultConfig() *UserConfig {
 			MainPanelSplitMode:       "flexible",
 			EnlargedSideViewLocation: "left",
 			WrapLinesInStagingView:   true,
+			UseHunkModeInStagingView: false,
 			Language:                 "auto",
 			TimeFormat:               "02 Jan 06",
 			ShortTimeFormat:          time.Kitchen,
@@ -819,6 +814,8 @@ func GetDefaultConfig() *UserConfig {
 				ShowGraph:      "always",
 				ShowWholeGraph: false,
 			},
+			LocalBranchSortOrder:         "date",
+			RemoteBranchSortOrder:        "date",
 			SkipHookPrefix:               "WIP",
 			MainBranches:                 []string{"master", "main"},
 			AutoFetch:                    true,
@@ -828,6 +825,9 @@ func GetDefaultConfig() *UserConfig {
 			AutoStageResolvedConflicts:   true,
 			BranchLogCmd:                 "git log --graph --color=always --abbrev-commit --decorate --date=relative --pretty=medium {{branchName}} --",
 			AllBranchesLogCmds:           []string{"git log --graph --all --color=always --abbrev-commit --decorate --date=relative  --pretty=medium"},
+			IgnoreWhitespaceInDiffView:   false,
+			DiffContextSize:              3,
+			RenameSimilarityThreshold:    50,
 			DisableForcePushing:          false,
 			CommitPrefixes:               map[string][]CommitPrefixConfig(nil),
 			BranchPrefix:                 "",
@@ -958,6 +958,7 @@ func GetDefaultConfig() *UserConfig {
 				ViewPullRequestOptions: "O",
 				CheckoutBranchByName:   "c",
 				ForceCheckoutBranch:    "F",
+				CheckoutPreviousBranch: "-",
 				RebaseBranch:           "r",
 				RenameBranch:           "R",
 				MergeIntoCurrentBranch: "M",

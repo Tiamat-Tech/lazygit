@@ -249,8 +249,7 @@ func (self *CommitLoader) extractCommitFromLine(hashPool *utils.StringPool, line
 }
 
 func (self *CommitLoader) getHydratedRebasingCommits(hashPool *utils.StringPool, addConflictingCommit bool) ([]*models.Commit, error) {
-	todoFileHasShortHashes := self.version.IsOlderThan(2, 25, 2)
-	return self.getHydratedTodoCommits(hashPool, self.getRebasingCommits(hashPool, addConflictingCommit), todoFileHasShortHashes)
+	return self.getHydratedTodoCommits(hashPool, self.getRebasingCommits(hashPool, addConflictingCommit), false)
 }
 
 func (self *CommitLoader) getHydratedSequencerCommits(hashPool *utils.StringPool, workingTreeState models.WorkingTreeState) ([]*models.Commit, error) {
@@ -584,7 +583,7 @@ func (self *CommitLoader) getFirstPushedCommit(refName string) (string, error) {
 
 // getLog gets the git log.
 func (self *CommitLoader) getLogCmd(opts GetCommitsOptions) *oscommands.CmdObj {
-	gitLogOrder := self.AppState.GitLogOrder
+	gitLogOrder := self.UserConfig().Git.Log.Order
 
 	refSpec := opts.RefName
 	if opts.RefToShowDivergenceFrom != "" {

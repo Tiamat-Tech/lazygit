@@ -18,7 +18,7 @@ import (
 )
 
 type FilesController struct {
-	baseController // nolint: unused
+	baseController
 	*ListControllerTrait[*filetree.FileNode]
 	c *ControllerCommon
 }
@@ -262,15 +262,14 @@ func (self *FilesController) GetOnRenderToMain() func() {
 				}
 				if node.File.ShortStatus == "DU" || node.File.ShortStatus == "UD" {
 					cmdObj := self.c.Git().Diff.DiffCmdObj([]string{"--base", "--", node.GetPath()})
-					task := types.NewRunPtyTask(cmdObj.GetCmd())
-					task.Prefix = message + "\n\n"
+					prefix := message + "\n\n"
 					if node.File.ShortStatus == "DU" {
-						task.Prefix += self.c.Tr.MergeConflictIncomingDiff
+						prefix += self.c.Tr.MergeConflictIncomingDiff
 					} else {
-						task.Prefix += self.c.Tr.MergeConflictCurrentDiff
+						prefix += self.c.Tr.MergeConflictCurrentDiff
 					}
-					task.Prefix += "\n\n"
-					opts.Main.Task = task
+					prefix += "\n\n"
+					opts.Main.Task = types.NewRunPtyTaskWithPrefix(cmdObj.GetCmd(), prefix)
 				} else {
 					opts.Main.Task = types.NewRenderStringTask(message)
 				}
@@ -486,9 +485,7 @@ func (self *FilesController) press(nodes []*filetree.FileNode) error {
 		return err
 	}
 
-	if err := self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}, Mode: types.ASYNC}); err != nil {
-		return err
-	}
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}, Mode: types.ASYNC})
 
 	self.context().HandleFocus(types.OnFocusOpts{})
 	return nil
@@ -566,7 +563,8 @@ func (self *FilesController) handleNonInlineConflict(file *models.File) error {
 		if err := command(file.GetPath()); err != nil {
 			return err
 		}
-		return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
+		self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
+		return nil
 	}
 	keepItem := &types.MenuItem{
 		Label: self.c.Tr.MergeConflictKeepFile,
@@ -611,9 +609,7 @@ func (self *FilesController) toggleStagedAll() error {
 		return err
 	}
 
-	if err := self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}, Mode: types.ASYNC}); err != nil {
-		return err
-	}
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}, Mode: types.ASYNC})
 
 	self.context().HandleFocus(types.OnFocusOpts{})
 	return nil
@@ -683,7 +679,8 @@ func (self *FilesController) ignoreOrExcludeTracked(node *filetree.FileNode, trA
 		return err
 	}
 
-	return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
+	return nil
 }
 
 func (self *FilesController) ignoreOrExcludeUntracked(node *filetree.FileNode, trAction string, f func(string) error) error {
@@ -693,7 +690,8 @@ func (self *FilesController) ignoreOrExcludeUntracked(node *filetree.FileNode, t
 		return err
 	}
 
-	return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
+	return nil
 }
 
 func (self *FilesController) ignoreOrExcludeFile(node *filetree.FileNode, trText string, trPrompt string, trAction string, f func(string) error) error {
@@ -755,7 +753,8 @@ func (self *FilesController) ignoreOrExcludeMenu(node *filetree.FileNode) error 
 }
 
 func (self *FilesController) refresh() error {
-	return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
+	self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
+	return nil
 }
 
 func (self *FilesController) handleAmendCommitPress() error {
@@ -795,19 +794,17 @@ func (self *FilesController) handleAmendCommitPress() error {
 				},
 			},
 		})
-	} else if !self.c.UserConfig().Gui.SkipAmendWarning {
-		self.c.Confirm(types.ConfirmOpts{
+	}
+
+	return self.c.ConfirmIf(!self.c.UserConfig().Gui.SkipAmendWarning,
+		types.ConfirmOpts{
 			Title:  self.c.Tr.AmendLastCommitTitle,
 			Prompt: self.c.Tr.SureToAmend,
 			HandleConfirm: func() error {
 				return doAmend()
 			},
-		})
-
-		return nil
-	}
-
-	return doAmend()
+		},
+	)
 }
 
 func (self *FilesController) isResolvingConflicts() bool {
@@ -900,12 +897,11 @@ func (self *FilesController) setStatusFiltering(filter filetree.FileTreeDisplayF
 	// Whenever we switch between untracked and other filters, we need to refresh the files view
 	// because the untracked files filter applies when running `git status`.
 	if previousFilter != filter && (previousFilter == filetree.DisplayUntracked || filter == filetree.DisplayUntracked) {
-		return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}, Mode: types.ASYNC})
+		self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}, Mode: types.ASYNC})
 	} else {
 		self.c.PostRefreshUpdate(self.context())
-
-		return nil
 	}
+	return nil
 }
 
 func (self *FilesController) edit(nodes []*filetree.FileNode) error {
@@ -1178,7 +1174,8 @@ func (self *FilesController) handleStashSave(stashFunc func(message string) erro
 			if err := stashFunc(stashComment); err != nil {
 				return err
 			}
-			return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH, types.FILES}})
+			self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH, types.FILES}})
+			return nil
 		},
 	})
 
@@ -1198,7 +1195,7 @@ func (self *FilesController) fetch() error {
 			return errors.New(self.c.Tr.PassUnameWrong)
 		}
 
-		_ = self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.BRANCHES, types.COMMITS, types.REMOTES, types.TAGS}, Mode: types.SYNC})
+		self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.BRANCHES, types.COMMITS, types.REMOTES, types.TAGS}, Mode: types.SYNC})
 
 		if err == nil {
 			err = self.c.Helpers().BranchesHelper.AutoForwardBranches()
@@ -1323,7 +1320,8 @@ func (self *FilesController) remove(selectedNodes []*filetree.FileNode) error {
 				}
 			}
 
-			return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES, types.WORKTREES}})
+			self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES, types.WORKTREES}})
+			return nil
 		},
 		Key: self.c.KeybindingsOpts().GetKey(self.c.UserConfig().Keybinding.Files.ConfirmDiscard),
 		Tooltip: utils.ResolvePlaceholderString(
@@ -1349,7 +1347,8 @@ func (self *FilesController) remove(selectedNodes []*filetree.FileNode) error {
 				}
 			}
 
-			return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES, types.WORKTREES}})
+			self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES, types.WORKTREES}})
+			return nil
 		},
 		Key: 'u',
 		Tooltip: utils.ResolvePlaceholderString(
@@ -1390,7 +1389,8 @@ func (self *FilesController) ResetSubmodule(submodule *models.SubmoduleConfig) e
 			return err
 		}
 
-		return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES, types.SUBMODULES}})
+		self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES, types.SUBMODULES}})
+		return nil
 	})
 }
 

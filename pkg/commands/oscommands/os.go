@@ -81,10 +81,6 @@ func FileType(path string) string {
 func (c *OSCommand) OpenFile(filename string) error {
 	commandTemplate := c.UserConfig().OS.Open
 	if commandTemplate == "" {
-		// Legacy support
-		commandTemplate = c.UserConfig().OS.OpenCommand
-	}
-	if commandTemplate == "" {
 		commandTemplate = config.GetPlatformDefaultConfig().Open
 	}
 	templateValues := map[string]string{
@@ -96,10 +92,6 @@ func (c *OSCommand) OpenFile(filename string) error {
 
 func (c *OSCommand) OpenLink(link string) error {
 	commandTemplate := c.UserConfig().OS.OpenLink
-	if commandTemplate == "" {
-		// Legacy support
-		commandTemplate = c.UserConfig().OS.OpenLinkCommand
-	}
 	if commandTemplate == "" {
 		commandTemplate = config.GetPlatformDefaultConfig().OpenLink
 	}
@@ -222,7 +214,7 @@ func (c *OSCommand) PipeCommands(cmdObjs ...*CmdObj) error {
 
 	c.LogCommand(logCmdStr, true)
 
-	for i := 0; i < len(cmds)-1; i++ {
+	for i := range len(cmds) - 1 {
 		stdout, err := cmds[i].StdoutPipe()
 		if err != nil {
 			return err
@@ -283,7 +275,7 @@ func PrepareForChildren(cmd *exec.Cmd) {
 }
 
 func (c *OSCommand) CopyToClipboard(str string) error {
-	escaped := strings.Replace(str, "\n", "\\n", -1)
+	escaped := strings.ReplaceAll(str, "\n", "\\n")
 	truncated := utils.TruncateWithEllipsis(escaped, 40)
 
 	msg := utils.ResolvePlaceholderString(

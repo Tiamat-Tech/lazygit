@@ -9,7 +9,9 @@ var ResetToUpstream = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Hard reset the current branch to the selected branch upstream",
 	ExtraCmdArgs: []string{},
 	Skip:         false,
-	SetupConfig:  func(config *config.AppConfig) {},
+	SetupConfig: func(config *config.AppConfig) {
+		config.GetUserConfig().Git.LocalBranchSortOrder = "recency"
+	},
 	SetupRepo: func(shell *Shell) {
 		shell.
 			CloneIntoRemote("origin").
@@ -96,6 +98,11 @@ var ResetToUpstream = NewIntegrationTest(NewIntegrationTestArgs{
 				t.ExpectPopup().Menu().
 					Title(Equals("Reset to origin/hard-branch")).
 					Select(Contains("Hard reset")).
+					Confirm()
+
+				t.ExpectPopup().Confirmation().
+					Title(Equals("Hard reset")).
+					Content(Contains("Are you sure you want to do a hard reset?")).
 					Confirm()
 			})
 		t.Views().Commits().Lines(Contains("hard commit"))

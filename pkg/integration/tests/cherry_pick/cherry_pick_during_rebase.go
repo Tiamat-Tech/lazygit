@@ -10,7 +10,8 @@ var CherryPickDuringRebase = NewIntegrationTest(NewIntegrationTestArgs{
 	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig: func(config *config.AppConfig) {
-		config.GetAppState().GitLogShowGraph = "never"
+		config.GetUserConfig().Git.Log.ShowGraph = "never"
+		config.GetUserConfig().Git.LocalBranchSortOrder = "recency"
 	},
 	SetupRepo: func(shell *Shell) {
 		shell.
@@ -80,7 +81,7 @@ var CherryPickDuringRebase = NewIntegrationTest(NewIntegrationTestArgs{
 				Contains("pick CI two"),
 				Contains("--- Commits ---"),
 				Contains("     CI three"),
-				Contains("     CI one"),
+				Contains("     CI one").IsSelected(),
 				Contains("     CI base"),
 			).
 			Tap(func() {
@@ -89,7 +90,7 @@ var CherryPickDuringRebase = NewIntegrationTest(NewIntegrationTestArgs{
 			Lines(
 				Contains("CI two"),
 				Contains("CI three"),
-				Contains("CI one"),
+				Contains("CI one").IsSelected(),
 				Contains("CI base"),
 			)
 	},

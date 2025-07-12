@@ -133,7 +133,7 @@ func (self *RemoteBranchesController) context() *context.RemoteBranchesContext {
 }
 
 func (self *RemoteBranchesController) delete(selectedBranches []*models.RemoteBranch) error {
-	return self.c.Helpers().BranchesHelper.ConfirmDeleteRemote(selectedBranches)
+	return self.c.Helpers().BranchesHelper.ConfirmDeleteRemote(selectedBranches, true)
 }
 
 func (self *RemoteBranchesController) merge(selectedBranch *models.RemoteBranch) error {
@@ -145,16 +145,18 @@ func (self *RemoteBranchesController) rebase(selectedBranch *models.RemoteBranch
 }
 
 func (self *RemoteBranchesController) createSortMenu() error {
-	return self.c.Helpers().Refs.CreateSortOrderMenu([]string{"alphabetical", "date"}, func(sortOrder string) error {
-		if self.c.GetAppState().RemoteBranchSortOrder != sortOrder {
-			self.c.GetAppState().RemoteBranchSortOrder = sortOrder
-			self.c.SaveAppStateAndLogError()
-			self.c.Contexts().RemoteBranches.SetSelection(0)
-			return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.REMOTES}})
-		}
-		return nil
-	},
-		self.c.GetAppState().RemoteBranchSortOrder)
+	return self.c.Helpers().Refs.CreateSortOrderMenu(
+		[]string{"alphabetical", "date"},
+		self.c.Tr.SortOrderPromptRemoteBranches,
+		func(sortOrder string) error {
+			if self.c.UserConfig().Git.RemoteBranchSortOrder != sortOrder {
+				self.c.UserConfig().Git.RemoteBranchSortOrder = sortOrder
+				self.c.Contexts().RemoteBranches.SetSelection(0)
+				self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.REMOTES}})
+			}
+			return nil
+		},
+		self.c.UserConfig().Git.RemoteBranchSortOrder)
 }
 
 func (self *RemoteBranchesController) createResetMenu(selectedBranch *models.RemoteBranch) error {
@@ -181,7 +183,8 @@ func (self *RemoteBranchesController) setAsUpstream(selectedBranch *models.Remot
 				return err
 			}
 
-			return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.BRANCHES, types.REMOTES}})
+			self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.BRANCHES, types.REMOTES}})
+			return nil
 		},
 	})
 

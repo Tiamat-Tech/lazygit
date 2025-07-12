@@ -74,7 +74,7 @@ func (self *BranchLoader) Load(reflogCommits []*models.Commit,
 ) ([]*models.Branch, error) {
 	branches := self.obtainBranches()
 
-	if self.AppState.LocalBranchSortOrder == "recency" {
+	if self.UserConfig().Git.LocalBranchSortOrder == "recency" {
 		reflogBranches := self.obtainReflogBranches(reflogCommits)
 		// loop through reflog branches. If there is a match, merge them, then remove it from the branches and keep it in the reflog branches
 		branchesWithRecency := make([]*models.Branch, 0)
@@ -254,7 +254,7 @@ func (self *BranchLoader) obtainBranches() []*models.Branch {
 			return nil, false
 		}
 
-		storeCommitDateAsRecency := self.AppState.LocalBranchSortOrder != "recency"
+		storeCommitDateAsRecency := self.UserConfig().Git.LocalBranchSortOrder != "recency"
 		return obtainBranch(split, storeCommitDateAsRecency), true
 	})
 }
@@ -268,7 +268,7 @@ func (self *BranchLoader) getRawBranches() (string, error) {
 	)
 
 	var sortOrder string
-	switch strings.ToLower(self.AppState.LocalBranchSortOrder) {
+	switch strings.ToLower(self.UserConfig().Git.LocalBranchSortOrder) {
 	case "recency", "date":
 		sortOrder = "-committerdate"
 	case "alphabetical":
@@ -356,9 +356,8 @@ func parseDifference(track string, regexStr string) string {
 	match := re.FindStringSubmatch(track)
 	if len(match) > 1 {
 		return match[1]
-	} else {
-		return "0"
 	}
+	return "0"
 }
 
 // TODO: only look at the new reflog commits, and otherwise store the recencies in

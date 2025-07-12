@@ -359,6 +359,23 @@
             "git log --graph --all --color=always --abbrev-commit --decorate --date=relative  --pretty=medium"
           ]
         },
+        "ignoreWhitespaceInDiffView": {
+          "type": "boolean",
+          "description": "If true, git diffs are rendered with the `--ignore-all-space` flag, which ignores whitespace changes. Can be toggled from within Lazygit with `\u003cc-w\u003e`.",
+          "default": false
+        },
+        "diffContextSize": {
+          "type": "integer",
+          "description": "The number of lines of context to show around each diff hunk. Can be changed from within Lazygit with the `{` and `}` keys.",
+          "default": 3
+        },
+        "renameSimilarityThreshold": {
+          "type": "integer",
+          "maximum": 100,
+          "minimum": 0,
+          "description": "The threshold for considering a file to be renamed, in percent. Can be changed from within Lazygit with the `(` and `)` keys.",
+          "default": 50
+        },
         "overrideGpg": {
           "type": "boolean",
           "description": "If true, do not spawn a separate process when using GPG",
@@ -398,6 +415,25 @@
         "log": {
           "$ref": "#/$defs/LogConfig",
           "description": "Config for showing the log in the commits view"
+        },
+        "localBranchSortOrder": {
+          "type": "string",
+          "enum": [
+            "date",
+            "recency",
+            "alphabetical"
+          ],
+          "description": "How branches are sorted in the local branches view.\nOne of: 'date' (default) | 'recency' | 'alphabetical'\nCan be changed from within Lazygit with the Sort Order menu (`s`) in the branches panel.",
+          "default": "date"
+        },
+        "remoteBranchSortOrder": {
+          "type": "string",
+          "enum": [
+            "date",
+            "alphabetical"
+          ],
+          "description": "How branches are sorted in the remote branches view.\nOne of: 'date' (default) | 'alphabetical'\nCan be changed from within Lazygit with the Sort Order menu (`s`) in the remote branches panel.",
+          "default": "date"
         },
         "truncateCopiedCommitHashesTo": {
           "type": "integer",
@@ -529,6 +565,11 @@
           "type": "boolean",
           "description": "If true, wrap lines in the staging view to the width of the view. This\nmakes it much easier to work with diffs that have long lines, e.g.\nparagraphs of markdown text.",
           "default": true
+        },
+        "useHunkModeInStagingView": {
+          "type": "boolean",
+          "description": "If true, hunk selection mode will be enabled by default when entering the staging view.",
+          "default": false
         },
         "language": {
           "type": "string",
@@ -794,6 +835,10 @@
         "forceCheckoutBranch": {
           "type": "string",
           "default": "F"
+        },
+        "checkoutPreviousBranch": {
+          "type": "string",
+          "default": "-"
         },
         "rebaseBranch": {
           "type": "string",
@@ -1491,7 +1536,7 @@
             "topo-order",
             "default"
           ],
-          "description": "One of: 'date-order' | 'author-date-order' | 'topo-order' | 'default'\n'topo-order' makes it easier to read the git log graph, but commits may not\nappear chronologically. See https://git-scm.com/docs/\n\nDeprecated: Configure this with `Log menu -\u003e Commit sort order` (\u003cc-l\u003e in the commits window by default).",
+          "description": "One of: 'date-order' | 'author-date-order' | 'topo-order' | 'default'\n'topo-order' makes it easier to read the git log graph, but commits may not\nappear chronologically. See https://git-scm.com/docs/\n\nCan be changed from within Lazygit with `Log menu -\u003e Commit sort order` (`\u003cc-l\u003e` in the commits window by default).",
           "default": "topo-order"
         },
         "showGraph": {
@@ -1501,7 +1546,7 @@
             "never",
             "when-maximised"
           ],
-          "description": "This determines whether the git graph is rendered in the commits panel\nOne of 'always' | 'never' | 'when-maximised'\n\nDeprecated: Configure this with `Log menu -\u003e Show git graph` (\u003cc-l\u003e in the commits window by default).",
+          "description": "This determines whether the git graph is rendered in the commits panel\nOne of 'always' | 'never' | 'when-maximised'\n\nCan be toggled from within lazygit with `Log menu -\u003e Show git graph` (`\u003cc-l\u003e` in the commits window by default).",
           "default": "always"
         },
         "showWholeGraph": {
@@ -1596,22 +1641,6 @@
         "shellFunctionsFile": {
           "type": "string",
           "description": "A shell startup file containing shell aliases or shell functions. This will be sourced before running any shell commands, so that shell functions are available in the `:` command prompt or even in custom commands.\nSee https://github.com/jesseduffield/lazygit/blob/master/docs/Config.md#using-aliases-or-functions-in-shell-commands"
-        },
-        "editCommand": {
-          "type": "string",
-          "description": "EditCommand is the command for editing a file.\nDeprecated: use Edit instead. Note that semantics are different:\nEditCommand is just the command itself, whereas Edit contains a\n\"{{filename}}\" variable."
-        },
-        "editCommandTemplate": {
-          "type": "string",
-          "description": "EditCommandTemplate is the command template for editing a file\nDeprecated: use EditAtLine instead."
-        },
-        "openCommand": {
-          "type": "string",
-          "description": "OpenCommand is the command for opening a file\nDeprecated: use Open instead."
-        },
-        "openLinkCommand": {
-          "type": "string",
-          "description": "OpenLinkCommand is the command for opening a link\nDeprecated: use OpenLink instead."
         }
       },
       "additionalProperties": false,

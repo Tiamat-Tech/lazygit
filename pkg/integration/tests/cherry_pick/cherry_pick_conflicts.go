@@ -10,7 +10,9 @@ var CherryPickConflicts = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Cherry pick commits from the subcommits view, with conflicts",
 	ExtraCmdArgs: []string{},
 	Skip:         false,
-	SetupConfig:  func(config *config.AppConfig) {},
+	SetupConfig: func(config *config.AppConfig) {
+		config.GetUserConfig().Git.LocalBranchSortOrder = "recency"
+	},
 	SetupRepo: func(shell *Shell) {
 		shared.MergeConflictsSetup(shell)
 	},
@@ -43,7 +45,7 @@ var CherryPickConflicts = NewIntegrationTest(NewIntegrationTestArgs{
 		t.Views().Commits().
 			Focus().
 			TopLines(
-				Contains("first change"),
+				Contains("first change").IsSelected(),
 			).
 			Press(keys.Commits.PasteCommits)
 
@@ -76,7 +78,7 @@ var CherryPickConflicts = NewIntegrationTest(NewIntegrationTestArgs{
 		t.Views().Commits().
 			Focus().
 			TopLines(
-				Contains("second-change-branch unrelated change"),
+				Contains("second-change-branch unrelated change").IsSelected(),
 				Contains("second change"),
 				Contains("first change"),
 			).

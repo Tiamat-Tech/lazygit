@@ -9,7 +9,9 @@ var CherryPickMerge = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Cherry pick a merge commit",
 	ExtraCmdArgs: []string{},
 	Skip:         false,
-	SetupConfig:  func(config *config.AppConfig) {},
+	SetupConfig: func(config *config.AppConfig) {
+		config.GetUserConfig().Git.LocalBranchSortOrder = "recency"
+	},
 	SetupRepo: func(shell *Shell) {
 		shell.
 			EmptyCommit("base").
@@ -63,9 +65,10 @@ var CherryPickMerge = NewIntegrationTest(NewIntegrationTestArgs{
 				t.Views().Information().Content(DoesNotContain("commit copied"))
 			}).
 			Lines(
-				Contains("Merge branch 'second-branch'").IsSelected(),
-				Contains("base"),
-			)
+				Contains("Merge branch 'second-branch'"),
+				Contains("base").IsSelected(),
+			).
+			SelectPreviousItem()
 
 		t.Views().Main().ContainsLines(
 			Contains("Merge branch 'second-branch'"),

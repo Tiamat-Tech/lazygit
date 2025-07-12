@@ -9,7 +9,9 @@ var CherryPick = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Cherry pick commits from the subcommits view, without conflicts",
 	ExtraCmdArgs: []string{},
 	Skip:         false,
-	SetupConfig:  func(config *config.AppConfig) {},
+	SetupConfig: func(config *config.AppConfig) {
+		config.GetUserConfig().Git.LocalBranchSortOrder = "recency"
+	},
 	SetupRepo: func(shell *Shell) {
 		shell.
 			EmptyCommit("base").
@@ -75,7 +77,7 @@ var CherryPick = NewIntegrationTest(NewIntegrationTestArgs{
 			Lines(
 				Contains("four"),
 				Contains("three"),
-				Contains("two"),
+				Contains("two").IsSelected(),
 				Contains("one"),
 				Contains("base"),
 			)
@@ -104,7 +106,7 @@ var CherryPick = NewIntegrationTest(NewIntegrationTestArgs{
 			Lines(
 				Contains("four"),
 				Contains("three"),
-				Contains("base"),
+				Contains("base").IsSelected(),
 			)
 	},
 })

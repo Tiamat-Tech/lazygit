@@ -55,29 +55,13 @@ var SpecificSelection = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			Press(keys.Main.ToggleSelectHunk).
 			SelectedLines(
-				Contains(`@@ -1,6 +1,6 @@`),
 				Contains(`-1a`),
 				Contains(`+aa`),
-				Contains(` 1b`),
-				Contains(`-1c`),
-				Contains(`+cc`),
-				Contains(` 1d`),
-				Contains(` 1e`),
-				Contains(` 1f`),
 			).
 			PressPrimaryAction().
-			// unlike in the staging panel, we don't remove lines from the patch building panel
-			// upon 'adding' them. So the same lines will be selected
 			SelectedLines(
-				Contains(`@@ -1,6 +1,6 @@`),
-				Contains(`-1a`),
-				Contains(`+aa`),
-				Contains(` 1b`),
 				Contains(`-1c`),
 				Contains(`+cc`),
-				Contains(` 1d`),
-				Contains(` 1e`),
-				Contains(` 1f`),
 			).
 			Tap(func() {
 				t.Views().Information().Content(Contains("Building patch"))
@@ -106,12 +90,21 @@ var SpecificSelection = NewIntegrationTest(NewIntegrationTestArgs{
 				Contains("+2a"),
 			).
 			PressPrimaryAction().
+			SelectedLines(
+				Contains("+2b"),
+			).
 			NavigateToLine(Contains("+2c")).
 			Press(keys.Universal.ToggleRangeSelect).
 			NavigateToLine(Contains("+2e")).
 			PressPrimaryAction().
+			SelectedLines(
+				Contains("+2f"),
+			).
 			NavigateToLine(Contains("+2g")).
 			PressPrimaryAction().
+			SelectedLines(
+				Contains("+2h"),
+			).
 			Tap(func() {
 				t.Views().Information().Content(Contains("Building patch"))
 
@@ -143,8 +136,7 @@ var SpecificSelection = NewIntegrationTest(NewIntegrationTestArgs{
 					Contains(`-1a`),
 					Contains(`+aa`),
 					Contains(` 1b`),
-					Contains(`-1c`),
-					Contains(`+cc`),
+					Contains(` 1c`),
 					Contains(` 1d`),
 					Contains(` 1e`),
 					Contains(` 1f`),

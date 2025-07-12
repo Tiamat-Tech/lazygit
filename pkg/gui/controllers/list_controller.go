@@ -109,10 +109,11 @@ func (self *ListController) handleLineChangeAux(f func(int), change int) error {
 	// we're not constantly re-rendering the main view.
 	cursorMoved := before != after
 	if cursorMoved {
-		if change == -1 {
+		switch change {
+		case -1:
 			checkScrollUp(self.context.GetViewTrait(), self.c.UserConfig(),
 				self.context.ModelIndexToViewIndex(before), self.context.ModelIndexToViewIndex(after))
-		} else if change == 1 {
+		case 1:
 			checkScrollDown(self.context.GetViewTrait(), self.c.UserConfig(),
 				self.context.ModelIndexToViewIndex(before), self.context.ModelIndexToViewIndex(after))
 		}
@@ -161,7 +162,6 @@ func (self *ListController) HandleRangeSelectUp() error {
 }
 
 func (self *ListController) HandleClick(opts gocui.ViewMouseBindingOpts) error {
-	prevSelectedLineIdx := self.context.GetList().GetSelectedLineIdx()
 	newSelectedLineIdx := self.context.ViewIndexToModelIndex(opts.Y)
 	alreadyFocused := self.isFocused()
 
@@ -175,7 +175,7 @@ func (self *ListController) HandleClick(opts gocui.ViewMouseBindingOpts) error {
 
 	self.context.GetList().SetSelection(newSelectedLineIdx)
 
-	if prevSelectedLineIdx == newSelectedLineIdx && alreadyFocused && self.context.GetOnClick() != nil {
+	if opts.IsDoubleClick && alreadyFocused && self.context.GetOnClick() != nil {
 		return self.context.GetOnClick()()
 	}
 	self.context.HandleFocus(types.OnFocusOpts{})

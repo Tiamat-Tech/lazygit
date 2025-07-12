@@ -343,6 +343,10 @@ func (self *LocalCommitsController) fixup(selectedCommits []*models.Commit, star
 }
 
 func (self *LocalCommitsController) reword(commit *models.Commit) error {
+	commitIdx := self.context().GetSelectedLineIdx()
+	if self.c.Git().Config.NeedsGpgSubprocessForCommit() && !self.isHeadCommit(commitIdx) {
+		return errors.New(self.c.Tr.DisabledForGPG)
+	}
 	commitMessage, err := self.c.Git().Commit.GetCommitMessage(commit.Hash())
 	if err != nil {
 		return err
@@ -352,7 +356,7 @@ func (self *LocalCommitsController) reword(commit *models.Commit) error {
 	}
 	self.c.Helpers().Commits.OpenCommitMessagePanel(
 		&helpers.OpenCommitMessagePanelOpts{
-			CommitIndex:      self.context().GetSelectedLineIdx(),
+			CommitIndex:      commitIdx,
 			InitialMessage:   commitMessage,
 			SummaryTitle:     self.c.Tr.Actions.RewordCommit,
 			DescriptionTitle: self.c.Tr.CommitDescriptionTitle,
@@ -388,7 +392,8 @@ func (self *LocalCommitsController) switchFromCommitMessagePanelToEditor(filepat
 		return err
 	}
 
-	return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+	self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+	return nil
 }
 
 func (self *LocalCommitsController) handleReword(summary string, description string) error {
@@ -404,7 +409,8 @@ func (self *LocalCommitsController) handleReword(summary string, description str
 		if err != nil {
 			return err
 		}
-		return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+		self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+		return nil
 	})
 }
 
@@ -429,17 +435,12 @@ func (self *LocalCommitsController) doRewordEditor() error {
 }
 
 func (self *LocalCommitsController) rewordEditor(commit *models.Commit) error {
-	if self.c.UserConfig().Gui.SkipRewordInEditorWarning {
-		return self.doRewordEditor()
-	}
-
-	self.c.Confirm(types.ConfirmOpts{
-		Title:         self.c.Tr.RewordInEditorTitle,
-		Prompt:        self.c.Tr.RewordInEditorPrompt,
-		HandleConfirm: self.doRewordEditor,
-	})
-
-	return nil
+	return self.c.ConfirmIf(!self.c.UserConfig().Gui.SkipRewordInEditorWarning,
+		types.ConfirmOpts{
+			Title:         self.c.Tr.RewordInEditorTitle,
+			Prompt:        self.c.Tr.RewordInEditorPrompt,
+			HandleConfirm: self.doRewordEditor,
+		})
 }
 
 func (self *LocalCommitsController) drop(selectedCommits []*models.Commit, startIdx int, endIdx int) error {
@@ -515,9 +516,8 @@ func (self *LocalCommitsController) edit(selectedCommits []*models.Commit, start
 		return self.c.Helpers().MergeAndRebase.CheckMergeOrRebaseWithRefreshOptions(
 			err,
 			types.RefreshOptions{
-				Mode: types.BLOCK_UI, Then: func() error {
+				Mode: types.BLOCK_UI, Then: func() {
 					self.restoreSelectionRangeAndMode(selectionRangeAndMode)
-					return nil
 				},
 			})
 	}
@@ -543,7 +543,7 @@ func (self *LocalCommitsController) startInteractiveRebaseWithEdit(
 		err := self.c.Git().Rebase.EditRebase(commitsToEdit[len(commitsToEdit)-1].Hash())
 		return self.c.Helpers().MergeAndRebase.CheckMergeOrRebaseWithRefreshOptions(
 			err,
-			types.RefreshOptions{Mode: types.BLOCK_UI, Then: func() error {
+			types.RefreshOptions{Mode: types.BLOCK_UI, Then: func() {
 				todos := make([]*models.Commit, 0, len(commitsToEdit)-1)
 				for _, c := range commitsToEdit[:len(commitsToEdit)-1] {
 					// Merge commits can't be set to "edit", so just skip them
@@ -554,12 +554,11 @@ func (self *LocalCommitsController) startInteractiveRebaseWithEdit(
 				if len(todos) > 0 {
 					err := self.updateTodos(todo.Edit, todos)
 					if err != nil {
-						return err
+						self.c.Log.Errorf("error when updating todos: %v", err)
 					}
 				}
 
 				self.restoreSelectionRangeAndMode(selectionRangeAndMode)
-				return nil
 			}})
 	})
 }
@@ -638,9 +637,11 @@ func (self *LocalCommitsController) updateTodos(action todo.TodoCommand, selecte
 		return err
 	}
 
-	return self.c.Refresh(types.RefreshOptions{
+	self.c.Refresh(types.RefreshOptions{
 		Mode: types.SYNC, Scope: []types.RefreshableView{types.REBASE_COMMITS},
 	})
+
+	return nil
 }
 
 func (self *LocalCommitsController) rewordEnabled(commit *models.Commit) *types.DisabledReason {
@@ -677,9 +678,10 @@ func (self *LocalCommitsController) moveDown(selectedCommits []*models.Commit, s
 		}
 		self.context().MoveSelection(1)
 
-		return self.c.Refresh(types.RefreshOptions{
+		self.c.Refresh(types.RefreshOptions{
 			Mode: types.SYNC, Scope: []types.RefreshableView{types.REBASE_COMMITS},
 		})
+		return nil
 	}
 
 	return self.c.WithWaitingStatusSync(self.c.Tr.MovingStatus, func() error {
@@ -700,9 +702,10 @@ func (self *LocalCommitsController) moveUp(selectedCommits []*models.Commit, sta
 		}
 		self.context().MoveSelection(-1)
 
-		return self.c.Refresh(types.RefreshOptions{
+		self.c.Refresh(types.RefreshOptions{
 			Mode: types.SYNC, Scope: []types.RefreshableView{types.REBASE_COMMITS},
 		})
+		return nil
 	}
 
 	return self.c.WithWaitingStatusSync(self.c.Tr.MovingStatus, func() error {
@@ -725,7 +728,8 @@ func (self *LocalCommitsController) amendTo(commit *models.Commit) error {
 				if err := self.c.Helpers().AmendHelper.AmendHead(); err != nil {
 					return err
 				}
-				return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+				self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+				return nil
 			})
 		}
 	} else {
@@ -740,17 +744,12 @@ func (self *LocalCommitsController) amendTo(commit *models.Commit) error {
 		}
 	}
 
-	if self.c.UserConfig().Gui.SkipAmendWarning {
-		return handleCommit()
-	}
-
-	self.c.Confirm(types.ConfirmOpts{
-		Title:         self.c.Tr.AmendCommitTitle,
-		Prompt:        self.c.Tr.AmendCommitPrompt,
-		HandleConfirm: handleCommit,
-	})
-
-	return nil
+	return self.c.ConfirmIf(!self.c.UserConfig().Gui.SkipAmendWarning,
+		types.ConfirmOpts{
+			Title:         self.c.Tr.AmendCommitTitle,
+			Prompt:        self.c.Tr.AmendCommitPrompt,
+			HandleConfirm: handleCommit,
+		})
 }
 
 func (self *LocalCommitsController) canAmendRange(commits []*models.Commit, start, end int) *types.DisabledReason {
@@ -800,7 +799,8 @@ func (self *LocalCommitsController) resetAuthor(start, end int) error {
 			return err
 		}
 
-		return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+		self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+		return nil
 	})
 }
 
@@ -815,7 +815,8 @@ func (self *LocalCommitsController) setAuthor(start, end int) error {
 					return err
 				}
 
-				return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+				self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+				return nil
 			})
 		},
 	})
@@ -833,7 +834,8 @@ func (self *LocalCommitsController) addCoAuthor(start, end int) error {
 				if err := self.c.Git().Rebase.AddCommitCoAuthor(self.c.Model().Commits, start, end, value); err != nil {
 					return err
 				}
-				return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+				self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+				return nil
 			})
 		},
 	})
@@ -861,14 +863,31 @@ func (self *LocalCommitsController) revert(commits []*models.Commit, start, end 
 		HandleConfirm: func() error {
 			self.c.LogAction(self.c.Tr.Actions.RevertCommit)
 			return self.c.WithWaitingStatusSync(self.c.Tr.RevertingStatus, func() error {
+				mustStash := helpers.IsWorkingTreeDirty(self.c.Model().Files)
+
+				if mustStash {
+					if err := self.c.Git().Stash.Push(self.c.Tr.AutoStashForReverting); err != nil {
+						return err
+					}
+				}
+
 				result := self.c.Git().Commit.Revert(hashes, isMerge)
-				if err := self.c.Helpers().MergeAndRebase.CheckMergeOrRebase(result); err != nil {
+				if err := self.c.Helpers().MergeAndRebase.CheckMergeOrRebaseWithRefreshOptions(result, types.RefreshOptions{Mode: types.SYNC}); err != nil {
 					return err
 				}
 				self.context().MoveSelection(len(commits))
-				return self.c.Refresh(types.RefreshOptions{
-					Mode: types.SYNC, Scope: []types.RefreshableView{types.COMMITS, types.BRANCHES},
-				})
+				self.context().FocusLine()
+
+				if mustStash {
+					if err := self.c.Git().Stash.Pop(0); err != nil {
+						return err
+					}
+					self.c.Refresh(types.RefreshOptions{
+						Scope: []types.RefreshableView{types.STASH, types.FILES},
+					})
+				}
+
+				return nil
 			})
 		},
 	})
@@ -904,7 +923,8 @@ func (self *LocalCommitsController) createFixupCommit(commit *models.Commit) err
 							}
 
 							self.context().MoveSelectedLine(1)
-							return self.c.Refresh(types.RefreshOptions{Mode: types.SYNC})
+							self.c.Refresh(types.RefreshOptions{Mode: types.SYNC})
+							return nil
 						})
 					})
 				},
@@ -1004,7 +1024,8 @@ func (self *LocalCommitsController) createAmendCommit(commit *models.Commit, inc
 					}
 
 					self.context().MoveSelectedLine(1)
-					return self.c.Refresh(types.RefreshOptions{Mode: types.SYNC})
+					self.c.Refresh(types.RefreshOptions{Mode: types.SYNC})
+					return nil
 				})
 			},
 			OnSwitchToEditor: nil,
@@ -1130,9 +1151,7 @@ func (self *LocalCommitsController) openSearch() error {
 	// we usually lazyload these commits but now that we're searching we need to load them now
 	if self.context().GetLimitCommits() {
 		self.context().SetLimitCommits(false)
-		if err := self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.COMMITS}}); err != nil {
-			return err
-		}
+		self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.COMMITS}})
 	}
 
 	return self.c.Helpers().Search.OpenSearchPrompt(self.context())
@@ -1152,21 +1171,22 @@ func (self *LocalCommitsController) handleOpenLogMenu() error {
 					}
 
 					return self.c.WithWaitingStatus(self.c.Tr.LoadingCommits, func(gocui.Task) error {
-						return self.c.Refresh(
+						self.c.Refresh(
 							types.RefreshOptions{Mode: types.SYNC, Scope: []types.RefreshableView{types.COMMITS}},
 						)
+						return nil
 					})
 				},
 			},
 			{
 				Label:     self.c.Tr.ShowGitGraph,
+				Tooltip:   self.c.Tr.ShowGitGraphTooltip,
 				OpensMenu: true,
 				OnPress: func() error {
-					currentValue := self.c.GetAppState().GitLogShowGraph
+					currentValue := self.c.UserConfig().Git.Log.ShowGraph
 					onPress := func(value string) func() error {
 						return func() error {
-							self.c.GetAppState().GitLogShowGraph = value
-							self.c.SaveAppStateAndLogError()
+							self.c.UserConfig().Git.Log.ShowGraph = value
 							self.c.PostRefreshUpdate(self.c.Contexts().LocalCommits)
 							self.c.PostRefreshUpdate(self.c.Contexts().SubCommits)
 							return nil
@@ -1196,20 +1216,21 @@ func (self *LocalCommitsController) handleOpenLogMenu() error {
 			},
 			{
 				Label:     self.c.Tr.SortCommits,
+				Tooltip:   self.c.Tr.SortCommitsTooltip,
 				OpensMenu: true,
 				OnPress: func() error {
-					currentValue := self.c.GetAppState().GitLogOrder
+					currentValue := self.c.UserConfig().Git.Log.Order
 					onPress := func(value string) func() error {
 						return func() error {
-							self.c.GetAppState().GitLogOrder = value
-							self.c.SaveAppStateAndLogError()
+							self.c.UserConfig().Git.Log.Order = value
 							return self.c.WithWaitingStatus(self.c.Tr.LoadingCommits, func(gocui.Task) error {
-								return self.c.Refresh(
+								self.c.Refresh(
 									types.RefreshOptions{
 										Mode:  types.SYNC,
 										Scope: []types.RefreshableView{types.COMMITS},
 									},
 								)
+								return nil
 							})
 						}
 					}
@@ -1250,9 +1271,7 @@ func (self *LocalCommitsController) GetOnFocus() func(types.OnFocusOpts) {
 		context := self.context()
 		if context.GetSelectedLineIdx() > COMMIT_THRESHOLD && context.GetLimitCommits() {
 			context.SetLimitCommits(false)
-			self.c.OnWorker(func(_ gocui.Task) error {
-				return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.COMMITS}})
-			})
+			self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.COMMITS}})
 		}
 	}
 }
